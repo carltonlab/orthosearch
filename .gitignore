@@ -1,0 +1,15 @@
+.snakemake/
+work/
+results/
+aux/
+data/
+query/
+*.zip
+*~
+__pycache__/
+.DS_Store
+.venv/
+.mamba/
+.conda/
+.snakemake_timestamp
+logs/

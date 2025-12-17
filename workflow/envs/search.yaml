@@ -1,0 +1,6 @@
+channels: [conda-forge, bioconda, defaults]
+dependencies:
+  - mmseqs2
+  - python=3.11
+  - biopython
+  - pandas

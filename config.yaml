@@ -1,0 +1,22 @@
+paths:
+  protein_dir: data/protein
+  cds_dir: data/cds
+  query_protein: query/query.protein.faa
+
+search:
+  top_k: 5
+  min_query_cov: 0.6
+  min_target_cov: 0.6
+  min_fident: 0.0
+  min_bits: 0.0
+  min_len_ratio: 0.6
+  max_len_ratio: 1.5
+  rbh: false
+
+alignment:
+  mafft_args: "--auto"
+  pal2nal_output: fasta
+
+threads:
+  mmseqs: 8
+  mafft: 8
