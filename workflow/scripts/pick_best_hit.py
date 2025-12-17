@@ -38,6 +38,8 @@ def load_hits(path: str) -> List[Hit]:
             raise SystemExit(f"[pick_best_hit] Missing columns in {path}: {sorted(miss)}")
         hits = []
         for row in r:
+            if not row["target"]:
+                    continue
             hits.append(Hit(
                 query=row["query"],
                 target=row["target"],

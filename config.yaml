@@ -5,8 +5,8 @@ paths:
 
 search:
   top_k: 5
-  min_query_cov: 0.6
-  min_target_cov: 0.6
+  min_query_cov: 0.4
+  min_target_cov: 0.2
   min_fident: 0.0
   min_bits: 0.0
   min_len_ratio: 0.6

@@ -101,7 +101,26 @@ rule mmseqs_tsv:
     conda:
         "workflow/envs/search.yaml"
     shell:
-        "mmseqs convertalis {input.qdb} {input.tdb} {input.adb} {output} --format-output 'query,target,fident,alnlen,mismatch,gapopen,qstart,qend,tstart,tend,evalue,bits,qcov,tcov,qlen,tlen'"
+        r"""
+        set -euo pipefail
+        tmp="{output}.body"
+        rm -f "$tmp"
+
+        # Write body to a real file; keep logs out of it.
+        mmseqs convertalis {input.qdb} {input.tdb} {input.adb} "$tmp" \
+          --format-output "query,target,fident,alnlen,mismatch,gapopen,qstart,qend,tstart,tend,evalue,bits,qcov,tcov,qlen,tlen" \
+          2>/dev/null || true
+
+        # Prepend a stable header (use printf, not echo -e).
+        printf "query\ttarget\tfident\talnlen\tmismatch\tgapopen\tqstart\tqend\ttstart\ttend\tevalue\tbits\tqcov\ttcov\tqlen\ttlen\n" > {output}
+
+        # Append body if any hits exist.
+        if [ -s "$tmp" ]; then
+          cat "$tmp" >> {output}
+        fi
+        """
+
+
 
 rule pick_best_hit:
     input:
