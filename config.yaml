@@ -20,3 +20,11 @@ alignment:
 threads:
   mmseqs: 8
   mafft: 8
+
+final_filter:
+  min_qcov: 0.6
+  min_tcov: 0.2
+  min_len_ratio: 0.6
+  max_len_ratio: 1.8
+  min_bits: 0.0
+
