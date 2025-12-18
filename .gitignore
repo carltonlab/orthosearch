@@ -9,6 +9,7 @@ query/
 *.zip
 *~
 __pycache__/
+cc
 .DS_Store
 .venv/
 .mamba/
