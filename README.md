@@ -64,6 +64,9 @@ Filtered (based on `config.yaml: final_filter` thresholds):
 - `results/<query_id>/protein.filtered.aln.faa`
 - `results/<query_id>/cds.codon_aware.filtered.aln.fasta`
 
+Rejected candidates (fail coverage/length-ratio thresholds; for manual rescue):
+- `results/<query_id>/combined.proteins.rejected.faa`
+
 Manifests:
 - `results/<query_id>/manifest.all.tsv` (per-species metrics for chosen hit)
 - `results/<query_id>/keep_species.txt` (species passing final_filter)

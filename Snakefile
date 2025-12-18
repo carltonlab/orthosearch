@@ -78,7 +78,8 @@ def query_orig_id_for(wc):
 
 rule all:
     input:
-        expand("results/{qid}/cds.codon_aware.filtered.aln.fasta", qid=QUERY_IDS)
+        expand("results/{qid}/cds.codon_aware.filtered.aln.fasta", qid=QUERY_IDS),
+        expand("results/{qid}/combined.proteins.rejected.faa", qid=QUERY_IDS)
 
 rule codon_alignment_all:
     input:
@@ -277,6 +278,22 @@ rule build_manifest_and_keep:
         "workflow/envs/search.yaml"
     shell:
         "python workflow/scripts/build_manifest_and_keep.py --topk-tsvs {input.topk} --qc-tsvs {input.qc} --out-manifest {output.manifest} --out-keep {output.keep} --min-qcov {params.min_qcov} --min-tcov {params.min_tcov} --min-len-ratio {params.min_len_ratio} --max-len-ratio {params.max_len_ratio} --min-bits {params.min_bits}"
+
+rule combined_proteins_rejected:
+    input:
+        manifest="results/{qid}/manifest.all.tsv",
+        proteins=lambda wc: expand(f"orthologs/{wc.qid}" + "/{sp}.protein.faa", sp=SPECIES)
+    output:
+        "results/{qid}/combined.proteins.rejected.faa"
+    params:
+        min_qcov=config["final_filter"]["min_qcov"],
+        min_tcov=config["final_filter"]["min_tcov"],
+        min_len_ratio=config["final_filter"]["min_len_ratio"],
+        max_len_ratio=config["final_filter"]["max_len_ratio"]
+    conda:
+        "workflow/envs/search.yaml"
+    shell:
+        "python workflow/scripts/collect_rejected_by_manifest.py --manifest {input.manifest} --orthologs-dir orthologs/{wildcards.qid} --suffix protein.faa --out {output} --min-qcov {params.min_qcov} --min-tcov {params.min_tcov} --min-len-ratio {params.min_len_ratio} --max-len-ratio {params.max_len_ratio}"
 
 rule combined_proteins_filtered:
     input:
