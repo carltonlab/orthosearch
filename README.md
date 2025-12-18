@@ -14,6 +14,7 @@ This workflow:
 
 - `data/protein/*.protein.fa`
 - `data/cds/*.cds.fa`
+- `query/*.fa|*.fasta|*.faa` (one or many files; each may contain one or many query proteins)
 
 Filename grammar supported:
 
@@ -27,7 +28,7 @@ Matching is *dot-anchored* to avoid sp2/sp24 collisions:
 - `{species}.protein.fa` or `{species}.*.protein.fa` (analogous for CDS).
 
 Query:
-- `query/query.protein.faa`
+- Place any number of query sequences under `query/` (FASTA). Headers must be unique across all query files. The pipeline creates per-query outputs using a sanitized version of each FASTA header as the directory name. If two headers sanitize to the same name, the workflow fails fast.
 
 Optional:
 - `overrides/overrides.tsv` with columns: `species<TAB>chosen_protein_id`
@@ -43,45 +44,43 @@ snakemake --use-conda --cores 16
 ```
 
 ## Running a new query
-
-1) Put your new query sequence (single FASTA record) at `query/query.protein.faa` (or point `paths.query_protein` in `config.yaml` to a different file).  
-2) Rerun:
-   ```bash
-   snakemake --use-conda --cores 16 --rerun-incomplete
-   ```
-   Snakemake will detect the changed query FASTA and rebuild only the MMseqs-dependent steps and everything downstream.
+Drop additional FASTA files or sequences into `query/`. Keep headers unique. Then rerun:
+```bash
+snakemake --use-conda --cores 16 --rerun-incomplete
+```
+Outputs are written under `results/<query_id>/` and `orthologs/<query_id>/`, where `<query_id>` is the sanitized FASTA header (non-alphanumeric characters replaced with `_`). A collision (two headers mapping to the same sanitized name) will fail fast.
 
 ## Outputs
 
 Unfiltered (all best hits):
-- `results/combined.proteins.all.faa`
-- `results/combined.cds.all.fna`
-- `results/protein.all.aln.faa`
-- `results/cds.codon_aware.all.aln.fasta`
+- `results/<query_id>/combined.proteins.all.faa`
+- `results/<query_id>/combined.cds.all.fna`
+- `results/<query_id>/protein.all.aln.faa`
+- `results/<query_id>/cds.codon_aware.all.aln.fasta`
 
 Filtered (based on `config.yaml: final_filter` thresholds):
-- `results/combined.proteins.filtered.faa`
-- `results/combined.cds.filtered.fna`
-- `results/protein.filtered.aln.faa`
-- `results/cds.codon_aware.filtered.aln.fasta`
+- `results/<query_id>/combined.proteins.filtered.faa`
+- `results/<query_id>/combined.cds.filtered.fna`
+- `results/<query_id>/protein.filtered.aln.faa`
+- `results/<query_id>/cds.codon_aware.filtered.aln.fasta`
 
 Manifests:
-- `results/manifest.all.tsv` (per-species metrics for chosen hit)
-- `results/keep_species.txt` (species passing final_filter)
+- `results/<query_id>/manifest.all.tsv` (per-species metrics for chosen hit)
+- `results/<query_id>/keep_species.txt` (species passing final_filter)
 
 Per species:
-- `orthologs/{species}.mmseqs_topk.tsv`
-- `orthologs/{species}.qc.tsv`
-- `orthologs/{species}.best_id.txt`
-- `orthologs/{species}.protein.faa`
-- `orthologs/{species}.cds.fna`
+- `orthologs/<query_id>/{species}.mmseqs_topk.tsv`
+- `orthologs/<query_id>/{species}.qc.tsv`
+- `orthologs/<query_id>/{species}.best_id.txt`
+- `orthologs/<query_id>/{species}.protein.faa`
+- `orthologs/<query_id>/{species}.cds.fna`
 
 ## Iterating thresholds without re-running MMseqs
 
-Edit `config.yaml: final_filter` and rerun only the cheap downstream steps:
-
+Edit `config.yaml: final_filter` and rerun only the cheap downstream steps for one query:
 ```bash
-snakemake --use-conda --cores 16 results/cds.codon_aware.filtered.aln.fasta \
+TARGET_QID=<query_id>
+snakemake --use-conda --cores 16 results/${TARGET_QID}/cds.codon_aware.filtered.aln.fasta \
   --forcerun build_manifest_and_keep \
             combined_proteins_filtered \
             combined_cds_filtered \
@@ -89,4 +88,4 @@ snakemake --use-conda --cores 16 results/cds.codon_aware.filtered.aln.fasta \
             pal2nal_codon_alignment_filtered
 ```
 
-This keeps all MMseqs searches intact and refreshes the manifest, filtered FASTAs, and filtered alignments with the new thresholds.
+This keeps all MMseqs searches intact and refreshes the manifest, filtered FASTAs, and filtered alignments with the new thresholds. To refresh everything for all queries, drop the target path (or use a glob) and keep the same `--forcerun` list.

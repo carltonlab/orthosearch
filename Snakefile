@@ -1,10 +1,10 @@
-import os, glob
+import os, glob, re
 
 configfile: "config.yaml"
 
 PROTEIN_DIR = config["paths"]["protein_dir"]
 CDS_DIR = config["paths"]["cds_dir"]
-QUERY_PROTEIN = config["paths"]["query_protein"]
+QUERY_DIR = config["paths"]["query_dir"]
 OVERRIDES = "overrides/overrides.tsv"
 
 def species_from_filename(fn: str) -> str:
@@ -34,27 +34,98 @@ SPECIES = sorted({species_from_filename(p) for p in protein_files})
 PROT_BY_SPECIES = {sp: require_unique_species_file(PROTEIN_DIR, sp, "protein") for sp in SPECIES}
 CDS_BY_SPECIES  = {sp: require_unique_species_file(CDS_DIR, sp, "cds") for sp in SPECIES}
 
+def slug_id(s: str) -> str:
+    safe = re.sub(r"[^A-Za-z0-9._-]", "_", s.strip())
+    if not safe:
+        raise ValueError(f"Empty/unsafe query id after sanitizing: {s!r}")
+    return safe
+
+def parse_query_headers(query_dir: str):
+    files = sorted(sum([glob.glob(os.path.join(query_dir, ext)) for ext in ("*.fa", "*.fasta", "*.faa")], []))
+    if not files:
+        raise ValueError(f"No query FASTA files found in {query_dir}")
+    seen_ids = {}
+    for path in files:
+        cur_id = ""
+        with open(path) as fh:
+            for line in fh:
+                if line.startswith(">"):
+                    header = line[1:].strip().split()[0]
+                    if not header:
+                        raise ValueError(f"Empty FASTA header in {path}")
+                    if header in seen_ids:
+                        raise ValueError(f"Duplicate query id '{header}' in {path} and {seen_ids[header]}")
+                    seen_ids[header] = path
+    if not seen_ids:
+        raise ValueError(f"No sequences found across query files: {files}")
+    # Build mapping from safe dir name -> (orig id, source file)
+    by_safe = {}
+    for orig, path in seen_ids.items():
+        safe = slug_id(orig)
+        if safe in by_safe:
+            raise ValueError(f"Different query ids collide to same directory name '{safe}': {by_safe[safe]['orig']} vs {orig}")
+        by_safe[safe] = {"orig": orig, "file": path}
+    return by_safe
+
+QUERY_INFO = parse_query_headers(QUERY_DIR)
+QUERY_IDS = sorted(QUERY_INFO.keys())
+
+def query_file_for(wc):
+    return QUERY_INFO[wc.qid]["file"]
+
+def query_orig_id_for(wc):
+    return QUERY_INFO[wc.qid]["orig"]
+
 rule all:
     input:
-        "results/cds.codon_aware.filtered.aln.fasta"
+        expand("results/{qid}/cds.codon_aware.filtered.aln.fasta", qid=QUERY_IDS)
 
 rule codon_alignment_all:
     input:
-        "results/cds.codon_aware.all.aln.fasta"
+        expand("results/{qid}/cds.codon_aware.all.aln.fasta", qid=QUERY_IDS)
 
 rule codon_alignment_filtered:
     input:
-        "results/cds.codon_aware.filtered.aln.fasta"
+        expand("results/{qid}/cds.codon_aware.filtered.aln.fasta", qid=QUERY_IDS)
 
 rule mmseqs_createdb_query:
     input:
-        QUERY_PROTEIN
+        lambda wc: query_file_for(wc)
+    params:
+        orig_id=lambda wc: query_orig_id_for(wc)
     output:
-        "work/mmseqs/queryDB"
+        "work/queries/{qid}.faa",
+        "work/mmseqs/{qid}/queryDB"
     conda:
         "workflow/envs/search.yaml"
     shell:
-        "mkdir -p work/mmseqs && mmseqs createdb {input} {output}"
+        r'''
+        set -euo pipefail
+        mkdir -p work/queries work/mmseqs/{wildcards.qid}
+        # Extract the specific query sequence by id into a single-seq fasta
+        python - "{params.orig_id}" {input} {output[0]} <<'PY'
+import sys, os
+orig_id = sys.argv[1]
+src = sys.argv[2]
+out = sys.argv[3]
+found = False
+seq = []
+with open(src) as fh:
+    cur = None
+    for line in fh:
+        if line.startswith(">"):
+            cur = line[1:].strip().split()[0]
+            continue
+        if cur == orig_id:
+            seq.append(line.rstrip())
+            found = True
+if not found:
+    raise SystemExit(f"[query extract] id {orig_id} not found in {src}")
+with open(out, "w") as o:
+    o.write(f">{orig_id}\n" + "\n".join(seq) + "\n")
+PY
+        mmseqs createdb {output[0]} {output[1]}
+        '''
 
 rule mmseqs_createdb_species:
     input:
@@ -68,24 +139,24 @@ rule mmseqs_createdb_species:
 
 rule mmseqs_search:
     input:
-        qdb="work/mmseqs/queryDB",
+        qdb="work/mmseqs/{qid}/queryDB",
         tdb="work/mmseqs/{sp}.protDB"
     output:
-        "work/mmseqs/{sp}.alnDB"
+        "work/mmseqs/{qid}/{sp}.alnDB"
     threads:
         config["threads"]["mmseqs"]
     conda:
         "workflow/envs/search.yaml"
     shell:
-        "mkdir -p work/mmseqs/tmp_{wildcards.sp} && mmseqs search {input.qdb} {input.tdb} {output} work/mmseqs/tmp_{wildcards.sp} --threads {threads}"
+        "mkdir -p work/mmseqs/tmp_{wildcards.qid}_{wildcards.sp} && mmseqs search {input.qdb} {input.tdb} {output} work/mmseqs/tmp_{wildcards.qid}_{wildcards.sp} --threads {threads}"
 
 rule mmseqs_tsv:
     input:
-        qdb="work/mmseqs/queryDB",
+        qdb="work/mmseqs/{qid}/queryDB",
         tdb="work/mmseqs/{sp}.protDB",
-        adb="work/mmseqs/{sp}.alnDB"
+        adb="work/mmseqs/{qid}/{sp}.alnDB"
     output:
-        "work/mmseqs/{sp}.hits.tsv"
+        "work/mmseqs/{qid}/{sp}.hits.tsv"
     conda:
         "workflow/envs/search.yaml"
     shell:
@@ -103,11 +174,11 @@ rule mmseqs_tsv:
 
 rule pick_best_hit:
     input:
-        hits="work/mmseqs/{sp}.hits.tsv"
+        hits="work/mmseqs/{qid}/{sp}.hits.tsv"
     output:
-        best="orthologs/{sp}.best_id.txt",
-        topk="orthologs/{sp}.mmseqs_topk.tsv",
-        qc="orthologs/{sp}.qc.tsv"
+        best="orthologs/{qid}/{sp}.best_id.txt",
+        topk="orthologs/{qid}/{sp}.mmseqs_topk.tsv",
+        qc="orthologs/{qid}/{sp}.qc.tsv"
     params:
         top_k=config["search"]["top_k"],
         qc_min_qcov=config["search"]["qc_min_query_cov"],
@@ -123,9 +194,9 @@ rule pick_best_hit:
 rule extract_protein:
     input:
         fasta=lambda wc: PROT_BY_SPECIES[wc.sp],
-        best="orthologs/{sp}.best_id.txt"
+        best="orthologs/{qid}/{sp}.best_id.txt"
     output:
-        "orthologs/{sp}.protein.faa"
+        "orthologs/{qid}/{sp}.protein.faa"
     conda:
         "workflow/envs/search.yaml"
     shell:
@@ -134,9 +205,9 @@ rule extract_protein:
 rule extract_cds:
     input:
         fasta=lambda wc: CDS_BY_SPECIES[wc.sp],
-        best="orthologs/{sp}.best_id.txt"
+        best="orthologs/{qid}/{sp}.best_id.txt"
     output:
-        "orthologs/{sp}.cds.fna"
+        "orthologs/{qid}/{sp}.cds.fna"
     conda:
         "workflow/envs/search.yaml"
     shell:
@@ -144,9 +215,9 @@ rule extract_cds:
 
 rule combined_proteins_all:
     input:
-        expand("orthologs/{sp}.protein.faa", sp=SPECIES)
+        lambda wc: expand(f"orthologs/{wc.qid}" + "/{sp}.protein.faa", sp=SPECIES)
     output:
-        "results/combined.proteins.all.faa"
+        "results/{qid}/combined.proteins.all.faa"
     conda:
         "workflow/envs/search.yaml"
     shell:
@@ -154,9 +225,9 @@ rule combined_proteins_all:
 
 rule combined_cds_all:
     input:
-        expand("orthologs/{sp}.cds.fna", sp=SPECIES)
+        lambda wc: expand(f"orthologs/{wc.qid}" + "/{sp}.cds.fna", sp=SPECIES)
     output:
-        "results/combined.cds.all.fna"
+        "results/{qid}/combined.cds.all.fna"
     conda:
         "workflow/envs/search.yaml"
     shell:
@@ -164,9 +235,9 @@ rule combined_cds_all:
 
 rule mafft_protein_alignment_all:
     input:
-        "results/combined.proteins.all.faa"
+        "results/{qid}/combined.proteins.all.faa"
     output:
-        "results/protein.all.aln.faa"
+        "results/{qid}/protein.all.aln.faa"
     threads:
         config["threads"]["mafft"]
     params:
@@ -178,10 +249,10 @@ rule mafft_protein_alignment_all:
 
 rule pal2nal_codon_alignment_all:
     input:
-        prot_aln="results/protein.all.aln.faa",
-        cds="results/combined.cds.all.fna"
+        prot_aln="results/{qid}/protein.all.aln.faa",
+        cds="results/{qid}/combined.cds.all.fna"
     output:
-        "results/cds.codon_aware.all.aln.fasta"
+        "results/{qid}/cds.codon_aware.all.aln.fasta"
     params:
         pal2nal_output=config["alignment"]["pal2nal_output"]
     conda:
@@ -191,11 +262,11 @@ rule pal2nal_codon_alignment_all:
 
 rule build_manifest_and_keep:
     input:
-        topk=expand("orthologs/{sp}.mmseqs_topk.tsv", sp=SPECIES),
-        qc=expand("orthologs/{sp}.qc.tsv", sp=SPECIES)
+        topk=lambda wc: expand(f"orthologs/{wc.qid}" + "/{sp}.mmseqs_topk.tsv", sp=SPECIES),
+        qc=lambda wc: expand(f"orthologs/{wc.qid}" + "/{sp}.qc.tsv", sp=SPECIES)
     output:
-        manifest="results/manifest.all.tsv",
-        keep="results/keep_species.txt"
+        manifest="results/{qid}/manifest.all.tsv",
+        keep="results/{qid}/keep_species.txt"
     params:
         min_qcov=config["final_filter"]["min_qcov"],
         min_tcov=config["final_filter"]["min_tcov"],
@@ -209,33 +280,33 @@ rule build_manifest_and_keep:
 
 rule combined_proteins_filtered:
     input:
-        keep="results/keep_species.txt",
-        manifest="results/manifest.all.tsv",
-        proteins=expand("orthologs/{sp}.protein.faa", sp=SPECIES)
+        keep="results/{qid}/keep_species.txt",
+        manifest="results/{qid}/manifest.all.tsv",
+        proteins=lambda wc: expand(f"orthologs/{wc.qid}" + "/{sp}.protein.faa", sp=SPECIES)
     output:
-        "results/combined.proteins.filtered.faa"
+        "results/{qid}/combined.proteins.filtered.faa"
     conda:
         "workflow/envs/search.yaml"
     shell:
-        "python workflow/scripts/filter_combined_by_keep.py --keep-species {input.keep} --orthologs-dir orthologs --suffix protein.faa --out {output} --require-at-least-one"
+        "python workflow/scripts/filter_combined_by_keep.py --keep-species {input.keep} --orthologs-dir orthologs/{wildcards.qid} --suffix protein.faa --out {output} --require-at-least-one"
 
 rule combined_cds_filtered:
     input:
-        keep="results/keep_species.txt",
-        manifest="results/manifest.all.tsv",
-        cds=expand("orthologs/{sp}.cds.fna", sp=SPECIES)
+        keep="results/{qid}/keep_species.txt",
+        manifest="results/{qid}/manifest.all.tsv",
+        cds=lambda wc: expand(f"orthologs/{wc.qid}" + "/{sp}.cds.fna", sp=SPECIES)
     output:
-        "results/combined.cds.filtered.fna"
+        "results/{qid}/combined.cds.filtered.fna"
     conda:
         "workflow/envs/search.yaml"
     shell:
-        "python workflow/scripts/filter_combined_by_keep.py --keep-species {input.keep} --orthologs-dir orthologs --suffix cds.fna --out {output} --require-at-least-one"
+        "python workflow/scripts/filter_combined_by_keep.py --keep-species {input.keep} --orthologs-dir orthologs/{wildcards.qid} --suffix cds.fna --out {output} --require-at-least-one"
 
 rule mafft_protein_alignment_filtered:
     input:
-        "results/combined.proteins.filtered.faa"
+        "results/{qid}/combined.proteins.filtered.faa"
     output:
-        "results/protein.filtered.aln.faa"
+        "results/{qid}/protein.filtered.aln.faa"
     threads:
         config["threads"]["mafft"]
     params:
@@ -247,10 +318,10 @@ rule mafft_protein_alignment_filtered:
 
 rule pal2nal_codon_alignment_filtered:
     input:
-        prot_aln="results/protein.filtered.aln.faa",
-        cds="results/combined.cds.filtered.fna"
+        prot_aln="results/{qid}/protein.filtered.aln.faa",
+        cds="results/{qid}/combined.cds.filtered.fna"
     output:
-        "results/cds.codon_aware.filtered.aln.fasta"
+        "results/{qid}/cds.codon_aware.filtered.aln.fasta"
     params:
         pal2nal_output=config["alignment"]["pal2nal_output"]
     conda:

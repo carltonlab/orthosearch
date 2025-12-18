@@ -1,7 +1,7 @@
 paths:
   protein_dir: data/protein
   cds_dir: data/cds
-  query_protein: query/query.protein.faa
+  query_dir: query
 
 search:
   top_k: 5
