@@ -120,9 +120,9 @@ with open(src) as fh:
             seq.append(line.rstrip())
             found = True
 if not found:
-    raise SystemExit(f"[query extract] id {orig_id} not found in {src}")
+    raise SystemExit("[query extract] id %s not found in %s" % (orig_id, src))
 with open(out, "w") as o:
-    o.write(f">{orig_id}\n" + "\n".join(seq) + "\n")
+    o.write(">" + orig_id + "\n" + "\n".join(seq) + "\n")
 PY
         mmseqs createdb {output[0]} {output[1]}
         '''
