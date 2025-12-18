@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import argparse, os, sys
+import argparse, os
 from Bio import SeqIO
 
 def main():
@@ -33,8 +33,7 @@ def main():
         msg = f"[extract_fasta_record] ID '{chosen}' not found in {args.fasta}"
         if args.strict:
             raise SystemExit(msg)
-        else:
-            print("WARNING:", msg, file=sys.stderr)
+        open(args.out, "w").close()
 
 if __name__ == "__main__":
     main()

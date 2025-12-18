@@ -1,4 +1,6 @@
 .snakemake/
+orthologs/
+done/
 work/
 results/
 aux/

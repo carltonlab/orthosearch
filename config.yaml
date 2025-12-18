@@ -5,26 +5,23 @@ paths:
 
 search:
   top_k: 5
-  min_query_cov: 0.4
-  min_target_cov: 0.2
-  min_fident: 0.0
-  min_bits: 0.0
-  min_len_ratio: 0.6
-  max_len_ratio: 1.5
-  rbh: false
+  # selection: best hit is always chosen (unless override); these are used only for QC flags
+  qc_min_query_cov: 0.6
+  qc_min_target_cov: 0.6
+  qc_min_len_ratio: 0.6
+  qc_max_len_ratio: 1.5
 
 alignment:
   mafft_args: "--auto"
   pal2nal_output: fasta
 
-threads:
-  mmseqs: 8
-  mafft: 8
-
 final_filter:
   min_qcov: 0.6
   min_tcov: 0.2
   min_len_ratio: 0.6
-  max_len_ratio: 1.8
+  max_len_ratio: 1.5
   min_bits: 0.0
 
+threads:
+  mmseqs: 8
+  mafft: 8
