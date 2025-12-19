@@ -7,6 +7,20 @@ def f(x):
 
 def isnan(x): return x != x
 
+def nonempty(p: str) -> bool:
+    return os.path.exists(p) and os.path.getsize(p) > 0
+
+def contains_unknown_x(path: str) -> bool:
+    if not nonempty(path):
+        return False
+    with open(path) as fh:
+        for line in fh:
+            if line.startswith(">"):
+                continue
+            if "X" in line.upper():
+                return True
+    return False
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--topk-tsvs", nargs="+", required=True)
@@ -18,6 +32,8 @@ def main():
     ap.add_argument("--min-len-ratio", type=float, default=0.6)
     ap.add_argument("--max-len-ratio", type=float, default=1.8)
     ap.add_argument("--min-bits", type=float, default=0.0)
+    ap.add_argument("--orthologs-dir", default="orthologs")
+    ap.add_argument("--suffix", default="protein.faa")
     args = ap.parse_args()
 
     qc_flags = {}
@@ -51,6 +67,11 @@ def main():
                 if (not isnan(lr)) and (lr < args.min_len_ratio or lr > args.max_len_ratio): keep = False
 
                 flags = ",".join([x for x in [row.get("flags",""), qc_flags.get(sp,"")] if x])
+                prot_path = os.path.join(args.orthologs_dir, f"{sp}.{args.suffix}")
+                has_x = contains_unknown_x(prot_path)
+                if has_x:
+                    keep = False
+                    flags = ",".join([x for x in [flags, "contains_X"] if x])
                 rows.append({
                     "species": sp,
                     "query": row.get("query",""),

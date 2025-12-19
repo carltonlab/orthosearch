@@ -66,6 +66,7 @@ Filtered (based on `config.yaml: final_filter` thresholds):
 
 Rejected candidates (fail coverage/length-ratio thresholds; for manual rescue):
 - `results/<query_id>/combined.proteins.rejected.faa`
+  - Also includes any protein containing an unknown amino acid (`X`), which is always rejected.
 
 Manifests:
 - `results/<query_id>/manifest.all.tsv` (per-species metrics for chosen hit)

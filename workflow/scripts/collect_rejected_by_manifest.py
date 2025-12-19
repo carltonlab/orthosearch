@@ -44,6 +44,11 @@ def main():
         for row in r:
             if not row.get("species"):
                 continue
+            keep = row.get("keep", "")
+            if keep != "1":
+                rejects.append(row["species"])
+                continue
+            # backward compatibility: also treat failures in case keep not set
             if fails_len_cov(row, args.min_qcov, args.min_tcov, args.min_len_ratio, args.max_len_ratio):
                 rejects.append(row["species"])
 

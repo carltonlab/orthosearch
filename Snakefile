@@ -277,7 +277,7 @@ rule build_manifest_and_keep:
     conda:
         "workflow/envs/search.yaml"
     shell:
-        "python workflow/scripts/build_manifest_and_keep.py --topk-tsvs {input.topk} --qc-tsvs {input.qc} --out-manifest {output.manifest} --out-keep {output.keep} --min-qcov {params.min_qcov} --min-tcov {params.min_tcov} --min-len-ratio {params.min_len_ratio} --max-len-ratio {params.max_len_ratio} --min-bits {params.min_bits}"
+        "python workflow/scripts/build_manifest_and_keep.py --topk-tsvs {input.topk} --qc-tsvs {input.qc} --out-manifest {output.manifest} --out-keep {output.keep} --min-qcov {params.min_qcov} --min-tcov {params.min_tcov} --min-len-ratio {params.min_len_ratio} --max-len-ratio {params.max_len_ratio} --min-bits {params.min_bits} --orthologs-dir orthologs/{wildcards.qid} --suffix protein.faa"
 
 rule combined_proteins_rejected:
     input:
