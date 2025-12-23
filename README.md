@@ -103,3 +103,14 @@ snakemake --use-conda --cores 4 results/${TARGET_QID}/protein.tree
 ```
 
 The protein tree is derived from `phylo/phylo.pruned.tree` by pruning to the species that pass `keep_species.txt` for the query, then replacing tip names with the chosen protein IDs. Using the reference species phylogeny (instead of de novo trees from single-protein alignments) generally gives more biologically realistic branchings for downstream selection/HyPhy analyses; the tip relabeling ties those branches to the actual protein sequences used.
+
+### Building a protein tree for legacy runs (no manifest)
+
+If you have a prior run that only produced `orthologs/*best_id.txt` (e.g., `done/dsb-2`) and no manifest, you can build a protein tree directly:
+```bash
+python workflow/scripts/build_protein_tree.py \
+  --tree phylo/phylo.pruned.tree \
+  --dir done/dsb-2 \
+  --out results/dsb-2/protein.tree
+```
+This uses non-empty `*.best_id.txt` files in `done/dsb-2` to derive both the kept species and the protein IDs for relabeling. The tree is pruned to those species and tips are renamed to the chosen proteins.
