@@ -79,7 +79,8 @@ def query_orig_id_for(wc):
 rule all:
     input:
         expand("results/{qid}/cds.codon_aware.filtered.aln.fasta", qid=QUERY_IDS),
-        expand("results/{qid}/combined.proteins.rejected.faa", qid=QUERY_IDS)
+        expand("results/{qid}/combined.proteins.rejected.faa", qid=QUERY_IDS),
+        expand("results/{qid}/protein.tree", qid=QUERY_IDS)
 
 rule codon_alignment_all:
     input:
@@ -345,3 +346,15 @@ rule pal2nal_codon_alignment_filtered:
         "workflow/envs/alignment.yaml"
     shell:
         "pal2nal.pl {input.prot_aln} {input.cds} -output {params.pal2nal_output} > {output}"
+
+rule build_protein_tree:
+    input:
+        tree="phylo/phylo.pruned.tree",
+        keep="results/{qid}/keep_species.txt",
+        manifest="results/{qid}/manifest.all.tsv"
+    output:
+        "results/{qid}/protein.tree"
+    conda:
+        "workflow/envs/search.yaml"
+    shell:
+        "python workflow/scripts/build_protein_tree.py --tree {input.tree} --keep {input.keep} --manifest {input.manifest} --out {output}"

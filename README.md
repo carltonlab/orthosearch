@@ -63,6 +63,7 @@ Filtered (based on `config.yaml: final_filter` thresholds):
 - `results/<query_id>/combined.cds.filtered.fna`
 - `results/<query_id>/protein.filtered.aln.faa`
 - `results/<query_id>/cds.codon_aware.filtered.aln.fasta`
+- `results/<query_id>/protein.tree` (species tree, pruned to kept species and tip names replaced by the chosen protein IDs)
 
 Rejected candidates (fail coverage/length-ratio thresholds; for manual rescue):
 - `results/<query_id>/combined.proteins.rejected.faa`
@@ -93,3 +94,12 @@ snakemake --use-conda --cores 16 results/${TARGET_QID}/cds.codon_aware.filtered.
 ```
 
 This keeps all MMseqs searches intact and refreshes the manifest, filtered FASTAs, and filtered alignments with the new thresholds. To refresh everything for all queries, drop the target path (or use a glob) and keep the same `--forcerun` list.
+
+## Building only the protein tree on an existing run
+
+```bash
+TARGET_QID=<query_id>
+snakemake --use-conda --cores 4 results/${TARGET_QID}/protein.tree
+```
+
+The protein tree is derived from `phylo/phylo.pruned.tree` by pruning to the species that pass `keep_species.txt` for the query, then replacing tip names with the chosen protein IDs. Using the reference species phylogeny (instead of de novo trees from single-protein alignments) generally gives more biologically realistic branchings for downstream selection/HyPhy analyses; the tip relabeling ties those branches to the actual protein sequences used.
