@@ -21,12 +21,12 @@ def read_manifest_targets(path: Path):
 
 def read_best_id_targets(base_dir: Path, suffix: str = ".best_id.txt"):
     mapping = {}
-    for p in base_dir.glob(f"*{suffix}"):
+    for p in base_dir.rglob(f"*{suffix}"):
         if p.is_dir():
             continue
         if p.stat().st_size <= 1:
             continue
-        sp = p.stem.replace(suffix, "") if p.name.endswith(suffix) else p.stem
+        sp = p.name[:-len(suffix)] if p.name.endswith(suffix) else p.stem
         with p.open() as fh:
             target = fh.readline().strip()
         if sp and target:
@@ -39,7 +39,14 @@ def prune_and_rename(tree_path: Path, keep_species, sp_to_target):
     # prune species not in keep_species
     for tip in list(tree.get_terminals()):
         if tip.name not in keep_species:
-            tree.prune(target=tip)
+            try:
+                tree.prune(tip)
+            except Exception:
+                # if pruning by object fails, attempt by name; ignore if still not found
+                try:
+                    tree.prune(tip.name)
+                except Exception:
+                    pass
     # rename remaining tips
     for tip in tree.get_terminals():
         new_name = sp_to_target.get(tip.name)
