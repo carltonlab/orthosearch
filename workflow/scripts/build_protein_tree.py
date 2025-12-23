@@ -7,6 +7,10 @@ from Bio import Phylo
 def read_keep(path: Path):
     return {ln.strip() for ln in path.read_text().splitlines() if ln.strip() and not ln.startswith("#")}
 
+def canon(sp: str) -> str:
+    # Strip leading genus prefix if present (e.g., caenorhabditis_wallacei -> wallacei)
+    return sp.split("_", 1)[1] if "_" in sp else sp
+
 
 def read_manifest_targets(path: Path):
     m = {}
@@ -16,7 +20,10 @@ def read_manifest_targets(path: Path):
             sp = row.get("species", "")
             tgt = row.get("target", "")
             if sp and tgt:
-                m[sp] = tgt
+                c = canon(sp)
+                if c in m and m[c] != tgt:
+                    raise SystemExit(f"[build_protein_tree] Conflicting targets for {c}: {m[c]} vs {tgt}")
+                m[c] = tgt
     return m
 
 def read_best_id_targets(base_dir: Path, suffix: str = ".best_id.txt"):
@@ -30,7 +37,10 @@ def read_best_id_targets(base_dir: Path, suffix: str = ".best_id.txt"):
         with p.open() as fh:
             target = fh.readline().strip()
         if sp and target:
-            mapping[sp] = target
+            c = canon(sp)
+            if c in mapping and mapping[c] != target:
+                raise SystemExit(f"[build_protein_tree] Conflicting targets for {c}: {mapping[c]} vs {target}")
+            mapping[c] = target
     return mapping
 
 
@@ -82,8 +92,8 @@ def main():
     else:
         raise SystemExit("[build_protein_tree] Need either --keep or --dir")
 
-    # only species that are both kept and have targets
-    keep = {sp for sp in keep if sp in sp_to_target}
+    # canonicalize keep set and intersect with available targets
+    keep = {canon(sp) for sp in keep if canon(sp) in sp_to_target}
     if not keep:
         raise SystemExit(f"[build_protein_tree] No species to keep after intersecting keep list and manifest targets")
 
