@@ -17,3 +17,4 @@ cc
 .conda/
 .snakemake_timestamp
 logs/
+cc*
